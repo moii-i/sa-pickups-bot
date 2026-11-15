@@ -75,6 +75,8 @@ Configura `PICKUP_HOSTER_ROLE` con el ID del rol Hoster del servidor oficial. Si
 
 Para habilitar salas privadas, indica el ID de una categoría del mismo servidor en `PICKUP_ROOM_CATEGORY_ID`. El bot necesita **Gestionar canales** y los permisos que concede en la sala. Las excepciones de acceso permiten a los participantes y al bot ver y escribir. Los administradores de Discord conservan su acceso habitual.
 
+`DISCORD_ADDITIONAL_GUILDS` acepta una lista JSON de servidores adicionales. Cada entrada requiere `guildId` y `channels`. También admite `roomCategory`, `hosterRole`, `staffRole`, `playerRole` y `cancelRoles`. En estos servidores, los administradores o los miembros con el rol Hoster o uno superior pueden abrir colas. Registra los comandos en cada servidor con `DISCORD_GUILD_ID` apuntando al servidor correspondiente al ejecutar `npm run registrar`. Los perfiles, grupos y partidas se consultan por servidor.
+
 Para responder a los pings en `#pickups-1`, configura `PICKUP_NOTICE_CHANNEL_ID` con el ID del canal y `PICKUP_NOTICE_ROLE_ID` con el ID del rol `@pickup`. El bot necesita **Ver canal** y **Enviar mensajes**. Usa las menciones que Discord indica en el evento del mensaje, sin leer su texto. Discord agrupa `@everyone` y `@here` en el mismo indicador.
 
 ### Verificación local

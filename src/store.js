@@ -422,8 +422,9 @@ export class PickupStore {
 
   partyInvite(context, id = null) {
     const invite = this.db.prepare(`SELECT i.*, p.guild_id, p.leader_id FROM party_invites i JOIN parties p ON p.id = i.party_id
-      WHERE p.guild_id = ? AND i.user_id = ? AND i.expires_at > ? AND (? IS NULL OR i.id = ?) ORDER BY i.id DESC LIMIT 1
-    `).get(context.guild, context.user, this.now(), id, id);
+      WHERE (p.guild_id = ? OR (? IS NULL AND ? IS NOT NULL)) AND i.user_id = ? AND i.expires_at > ?
+      AND (? IS NULL OR i.id = ?) ORDER BY i.id DESC LIMIT 1
+    `).get(context.guild ?? null, context.guild ?? null, id, context.user, this.now(), id, id);
     if (!invite) throw new PickupError('No tienes esa invitación vigente.');
     return invite;
   }
@@ -620,13 +621,13 @@ export class PickupStore {
       WHERE p.guild_id = ? AND r.channel_id = ?`).get(guild, channel));
   }
 
-  pendingRooms() {
+  pendingRooms(guild = null) {
     return this.db.prepare(`SELECT p.*, r.channel_id AS room_channel_id, r.roster_version, r.room_version,
         r.lineup_message_id, r.announced FROM pickup_rooms r
       JOIN pickups p ON p.id = r.pickup_id
-      WHERE (p.status IN ('open','playing','voting') AND r.roster_version <> r.room_version)
-        OR (r.announced = 0 AND p.status IN ('playing','voting'))
-      ORDER BY p.id LIMIT 5`).all();
+      WHERE p.guild_id = COALESCE(?, p.guild_id) AND ((p.status IN ('open','playing','voting') AND r.roster_version <> r.room_version)
+        OR (r.announced = 0 AND p.status IN ('playing','voting')))
+      ORDER BY p.id LIMIT 5`).all(guild);
   }
 
   saveRoomChannel(pickupId, channel) {
@@ -653,10 +654,11 @@ export class PickupStore {
       WHERE p.guild_id = ? AND p.id = ? AND p.status IN ('open','playing') AND r.announced = 0`).get(guild, id));
   }
 
-  lineupsToPublish() {
+  lineupsToPublish(guild = null) {
     return this.db.prepare(`SELECT p.id, p.guild_id, r.channel_id, r.roster_version, r.lineup_message_id FROM pickup_rooms r
       JOIN pickups p ON p.id = r.pickup_id WHERE r.announced = 1 AND r.lineup_posted = 0
-      AND r.room_version = r.roster_version AND r.channel_id IS NOT NULL AND p.status IN ('playing','voting') ORDER BY p.id LIMIT 5`).all();
+      AND r.room_version = r.roster_version AND r.channel_id IS NOT NULL AND p.status IN ('playing','voting')
+      AND p.guild_id = COALESCE(?, p.guild_id) ORDER BY p.id LIMIT 5`).all(guild);
   }
 
   rememberLineupMessage(id, message) {
@@ -667,9 +669,9 @@ export class PickupStore {
     this.db.prepare('UPDATE pickup_rooms SET lineup_posted = 1 WHERE pickup_id = ? AND roster_version = ?').run(id, version);
   }
 
-  expiredRooms() {
+  expiredRooms(guild = null) {
     return this.db.prepare(`SELECT r.*, p.guild_id FROM pickup_rooms r JOIN pickups p ON p.id = r.pickup_id
-      WHERE delete_after <= ? OR p.expired = 1 ORDER BY delete_after LIMIT 5`).all(this.now());
+      WHERE p.guild_id = COALESCE(?, p.guild_id) AND (delete_after <= ? OR p.expired = 1) ORDER BY delete_after LIMIT 5`).all(guild, this.now());
   }
 
   forgetRoom(pickupId) {

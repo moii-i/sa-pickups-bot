@@ -13,6 +13,7 @@ import { maintainRooms } from './rooms.js';
 import { PickupStore } from './store.js';
 
 const SNOWFLAKE = /^\d{17,20}$/;
+const isSnowflake = (id) => typeof id === 'string' && SNOWFLAKE.test(id);
 const MAX_BODY = 65_536;
 const ED25519_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 const gifs = new Map(Object.values(ARCADE_PATHS)
@@ -44,7 +45,9 @@ async function rememberPanel(store, discord, interaction, queueId) {
 export async function maintainQueues(store, discord, media, config = {}) {
   store.expireQueues();
   if (!discord) return;
-  if (config.roomCategory) await maintainRooms(store, discord, media, config);
+  for (const guild of [config, ...(config.additionalGuilds?.values() ?? [])]) {
+    if (guild.roomCategory) await maintainRooms(store, discord, media, guild);
+  }
   for (const pickup of store.queuePanelsToSync()) {
     try {
       await discord.editMessage(pickup.panel_channel_id, pickup.message_id,
@@ -114,7 +117,8 @@ export function interactionHandler(store, config) {
       return json(res, 400, { error: 'invalid JSON' });
     }
     try {
-      const { afterResponse, queueId, ...reply } = await handleInteraction(payload, store, config);
+      const guildConfig = config.additionalGuilds?.get(payload?.guild_id) ?? config;
+      const { afterResponse, queueId, ...reply } = await handleInteraction(payload, store, guildConfig);
       json(res, 200, reply);
       if (afterResponse) void afterResponse().catch((error) => console.error('Discord party reply failed:', error.name, error.message));
       if (queueId && config.discord) {
@@ -128,6 +132,24 @@ export function interactionHandler(store, config) {
       });
     }
   };
+}
+
+function readAdditionalGuilds(value, config) {
+  const entries = value ? JSON.parse(value) : [];
+  if (!Array.isArray(entries)) throw new Error('DISCORD_ADDITIONAL_GUILDS debe ser una lista JSON.');
+  const guilds = new Map();
+  for (const entry of entries) {
+    const { guildId, channels, roomCategory, hosterRole = 'Hoster', staffRole, playerRole, cancelRoles = [] } = entry ?? {};
+    if (!isSnowflake(guildId) || guildId === config.guildId || guilds.has(guildId) ||
+        !Array.isArray(channels) || !channels.length || !Array.isArray(cancelRoles) ||
+        [...channels, ...cancelRoles, ...[roomCategory, staffRole, playerRole].filter(Boolean)].some((id) => !isSnowflake(id)) ||
+        typeof hosterRole !== 'string' || !hosterRole.trim() || !config.discord) {
+      throw new Error('Revisa el servidor, sus canales y sus roles en DISCORD_ADDITIONAL_GUILDS.');
+    }
+    guilds.set(guildId, { ...config, guildId, channels, roomCategory, hosterRole: hosterRole.trim(), staffRole, playerRole,
+      cancelRoles, adminCanHost: true, noticeChannel: undefined, noticeRole: undefined });
+  }
+  return guilds;
 }
 
 function configFromEnv(env) {
@@ -155,20 +177,28 @@ function configFromEnv(env) {
   if ((noticeChannel || noticeRole) && (!noticeChannel || !noticeRole || !token)) {
     throw new Error('Configura el canal, el rol y el token de Discord para los avisos de pickup.');
   }
-  return { appId, guildId, publicKey, staffRole, hosterRole, cancelRoles, playerRole, channels, roomCategory,
+  const config = { appId, guildId, publicKey, staffRole, hosterRole, cancelRoles, playerRole, channels, roomCategory,
     noticeChannel, noticeRole, token,
     discord: token ? discordApi(token) : undefined, media: arcadeUrls(env.PUBLIC_BASE_URL?.trim()),
     publicBaseUrl: env.PUBLIC_BASE_URL?.trim() };
+  config.additionalGuilds = readAdditionalGuilds(env.DISCORD_ADDITIONAL_GUILDS, config);
+  return config;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const config = configFromEnv(process.env);
   const dbPath = process.env.DB_PATH || './data/pickups.sqlite';
   const store = new PickupStore(dbPath, Date.now, process.env.DB_ENCRYPTION_KEY);
-  if (config.roomCategory && config.publicBaseUrl) config.lineupViewer = createLineupViewer(store, config.guildId, config.publicBaseUrl);
+  const guilds = [config, ...config.additionalGuilds.values()];
+  const withRooms = guilds.filter((guild) => guild.roomCategory);
+  if (withRooms.length && config.publicBaseUrl) {
+    const viewer = createLineupViewer(store, withRooms.map((guild) => guild.guildId), config.publicBaseUrl);
+    config.lineupViewer = viewer;
+    for (const guild of withRooms) guild.lineupViewer = viewer;
+  }
   const port = Number(process.env.PORT || 3000);
   const server = createServer({ requestTimeout: 10_000 }, interactionHandler(store, config));
-  server.listen(port, '0.0.0.0', () => console.log(`SA Pickups escuchando en el puerto ${port}.`));
+  server.listen(port, '0.0.0.0', () => console.log(`SA Pickups escuchando en el puerto ${port}. Servidores configurados: ${guilds.length}.`));
   const stopNotices = config.noticeChannel ? startPickupNotices(config.token, {
     guildId: config.guildId, channelId: config.noticeChannel, roleId: config.noticeRole, discord: config.discord,
   }) : undefined;
@@ -185,7 +215,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     }
   };
   void updateQueues();
-  const timer = setInterval(updateQueues, config.roomCategory ? 5_000 : 15_000).unref();
+  const timer = setInterval(updateQueues, withRooms.length ? 5_000 : 15_000).unref();
   for (const signal of ['SIGINT', 'SIGTERM']) {
     process.once(signal, () => {
       clearInterval(timer);

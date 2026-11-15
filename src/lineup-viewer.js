@@ -35,7 +35,8 @@ function send(res, status, type, body, headers = {}) {
   res.end(body);
 }
 
-export function createLineupViewer(store, guildId, baseUrl) {
+export function createLineupViewer(store, guilds, baseUrl) {
+  const guildIds = Array.isArray(guilds) ? guilds : [guilds];
   const sessions = new Map();
   const pathFor = (id) => `/alineacion/${id}`;
   const urlFor = (id) => new URL(pathFor(id), baseUrl).href;
@@ -61,9 +62,9 @@ export function createLineupViewer(store, guildId, baseUrl) {
     const match = /^\/alineacion\/([1-9][0-9]{0,14})(\/datos)?$/.exec(path);
     const id = Number(match?.[1]);
     const session = getSession(req, id);
-    const pickup = match && store.activeLineup(guildId, id);
+    const pickup = match && guildIds.some((guildId) => store.activeLineup(guildId, id));
     if (!pickup) {
-      if (match?.[2] && session?.user && store.lineupWaiting(guildId, id) &&
+      if (match?.[2] && session?.user && guildIds.some((guildId) => store.lineupWaiting(guildId, id)) &&
           store.roster(id).some((p) => p.user_id === session.user)) {
         send(res, 409, 'text/plain; charset=utf-8', 'Buscando reemplazo.');
         return true;
@@ -100,9 +101,9 @@ export function createLineupViewer(store, guildId, baseUrl) {
     return true;
   }
 
-  function authorize(pickup, channel, user, code) {
-    const active = store.activeLineup(guildId, pickup);
-    if (active?.room_channel_id !== channel || !store.roster(pickup).some((p) => p.user_id === user)) {
+  function authorize(pickup, channel, user, code, guildId = guildIds[0]) {
+    const active = guildIds.includes(guildId) && store.activeLineup(guildId, pickup);
+    if (!active || active.room_channel_id !== channel || !store.roster(pickup).some((p) => p.user_id === user)) {
       throw new PickupError('Solo los jugadores de esta pickup pueden autorizar el visor desde su sala.');
     }
     if (!code) return;

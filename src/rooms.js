@@ -54,8 +54,8 @@ async function clearOldLineup(store, discord, pickup, channel, appId) {
   }
 }
 
-export async function maintainRooms(store, discord, media, { appId, roomCategory, lineupViewer }) {
-  for (const room of store.expiredRooms()) {
+export async function maintainRooms(store, discord, media, { appId, guildId, roomCategory, lineupViewer }) {
+  for (const room of store.expiredRooms(guildId)) {
     try {
       const channel = await findRoom(discord, room.guild_id, roomTopic(room.guild_id, room.pickup_id), room.channel_id);
       if (channel) await discord.deleteChannel(channel.id).catch((error) => {
@@ -66,7 +66,7 @@ export async function maintainRooms(store, discord, media, { appId, roomCategory
       console.error(`No pude retirar la sala de la pickup #${room.pickup_id}:`, error.message);
     }
   }
-  for (const pickup of store.pendingRooms()) {
+  for (const pickup of store.pendingRooms(guildId)) {
     try {
       const topic = roomTopic(pickup.guild_id, pickup.id);
       const users = store.roster(pickup.id).map((player) => player.user_id);
@@ -111,7 +111,7 @@ export async function maintainRooms(store, discord, media, { appId, roomCategory
     }
   }
   if (!lineupViewer) return;
-  for (const pickup of store.lineupsToPublish()) {
+  for (const pickup of store.lineupsToPublish(guildId)) {
     try {
       const roster = store.roster(pickup.id);
       const players = lineupPlayers(roster);

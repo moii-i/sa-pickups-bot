@@ -69,7 +69,11 @@ test('Pickup completa por HTTP firmado, permisos, MVP y notas persistentes', asy
   const { publicKey, privateKey } = generateKeyPairSync('ed25519');
   const publicKeyHex = publicKey.export({ format: 'der', type: 'spki' }).subarray(-32).toString('hex');
   const media = arcadeUrls('https://example.com');
-  const handler = interactionHandler(store, { ...config, publicKey: publicKeyHex, media });
+  const otherGuild = '200000000000000009';
+  const otherChannel = '500000000000000009';
+  const additional = { ...config, guildId: otherGuild, channels: [otherChannel], playerRole: undefined, adminCanHost: true, media };
+  const handler = interactionHandler(store, { ...config, publicKey: publicKeyHex, media,
+    additionalGuilds: new Map([[otherGuild, additional]]) });
   t.after(() => {
     store.db.close();
     rmSync(dir, { recursive: true });
@@ -214,9 +218,18 @@ test('Pickup completa por HTTP firmado, permisos, MVP y notas persistentes', asy
   assert.equal(leaderboard.image.url, media.clasificacion);
   assert.match(leaderboard.description, /🥇.*9\.00\/10/);
   assert.match(leaderboard.description, /⭐{6} · 🏆 1 victoria/u);
+  const otherContext = { guild_id: otherGuild, channel: { id: otherChannel } };
+  const separateProfile = (await send(interaction(2, a, { name: 'perfil' }, otherContext))).data.embeds[0];
+  assert.match(separateProfile.fields[0].value, /0\/3/);
+  const crossGuild = await slash(host, 'ver', { id: 1 }, otherContext);
+  assert.match(crossGuild.data.content, /No encontré esa pickup/);
+  const secondaryQueue = await slash(host, 'crear', {}, { ...otherContext,
+    member: { user: { id: host, username: 'Admin' }, permissions: '8', roles: [] } });
+  assert.match(secondaryQueue.data.embeds[0].title, /Convocatoria abierta/);
+  assert.equal(store.pickup({ guild: otherGuild, channel: otherChannel }, 4).guild_id, otherGuild);
   await slash(host, 'crear');
-  await click(a, 'joinA', 4, ['GK']);
-  const canceled = (await slash(host, 'cancelar', { id: 4 })).data.embeds[0];
+  await click(a, 'queuejoin', 5);
+  const canceled = (await slash(host, 'cancelar', { id: 5 })).data.embeds[0];
   assert.match(canceled.title, /Cancelada/);
   assert.equal(canceled.image.url, media['cola-cerrada']);
   const reopened = new PickupStore(file);

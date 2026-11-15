@@ -508,8 +508,12 @@ function partyDirectMessage(payload, store, config, match) {
   const user = payload.user;
   if (!user || payload.guild_id) throw new PickupError('Usa este botón en el mensaje privado de invitación.');
   const [, action, id] = match;
+  const invite = store.partyInvite({ user: user.id }, Number(id));
+  if (invite.guild_id !== config.guildId) {
+    config = config.additionalGuilds?.get(invite.guild_id);
+    if (!config) throw new PickupError('No tienes esa invitación vigente.');
+  }
   const context = { guild: config.guildId, user: user.id, name: user.global_name || user.username };
-  const invite = store.partyInvite(context, Number(id));
   if (action === 'partydecline') {
     store.answerPartyInvite(context, invite.id);
     return { type: 7, data: { content: 'Invitación rechazada.', components: [] } };
@@ -721,10 +725,10 @@ export function handleInteraction(payload, store, config) {
       if (payload.type === 5) {
         const code = data.components?.find((item) => item.component?.custom_id === 'code')?.component.value;
         if (!/^[a-f0-9]{8}$/i.test(code?.trim() ?? '')) throw new PickupError('Escribe el código de ocho caracteres del visor.');
-        config.lineupViewer.authorize(id, channel, context.user, code);
+        config.lineupViewer.authorize(id, channel, context.user, code, context.guild);
         return privateReply('✅ Visor autorizado. Vuelve a la pestaña del visor para ver la alineación.');
       }
-      config.lineupViewer.authorize(id, channel, context.user);
+      config.lineupViewer.authorize(id, channel, context.user, undefined, context.guild);
       return { type: 9, data: {
         title: 'Autorizar visor 3D', custom_id: data.custom_id, components: [{
           type: 18, label: 'Código que aparece en el visor',
@@ -762,14 +766,16 @@ export function handleInteraction(payload, store, config) {
         const queue = (canCreate) => renderPickup(store.queueParty(context, payload.id, args.equipo, canCreate,
           Boolean(config.roomCategory), DRAFT_QUEUE_FORMAT));
         try {
-          return queue(!config.hosterRole);
+          return queue(config.adminCanHost && admin || !config.hosterRole && staff);
         } catch (error) {
           if (!(error instanceof PickupCreationRequired)) throw error;
+          if (!config.hosterRole) throw new PickupError('Este comando es para la organización.');
           return withPickupCreation(config, roles, () => queue(true));
         }
       }
       if (command.name === 'crear') {
         const create = () => renderPickup(store.create(context, DEFAULT_TEAM_SIZE, payload.id, DRAFT_QUEUE_FORMAT, args.modo === 'amistosa'));
+        if (config.adminCanHost && admin) return create();
         if (config.hosterRole) return withPickupCreation(config, roles, create);
         if (!staff) throw new PickupError('Este comando es para la organización.');
         return create();
