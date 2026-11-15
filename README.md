@@ -82,3 +82,9 @@ Para responder a los pings en `#pickups-1`, configura `PICKUP_NOTICE_CHANNEL_ID`
 ### Verificación local
 
 `npm test` simula solicitudes HTTP firmadas con una clave de prueba y una base SQLite temporal. También prueba el flujo 5v5, el balance y la migración desde la base de la primera versión. `npm start` arranca el servidor con las variables indicadas. Para probar desde Discord en local, el endpoint requiere una URL HTTPS que Discord pueda alcanzar. Usa un volumen persistente con backups para conservar el historial entre despliegues.
+
+### Respaldos de la base
+
+Al arrancar y después cada hora, el servicio comprueba si el último respaldo tiene más de 24 horas. Si es así, consolida la base, copia el archivo a `respaldo-AAAAMMDDTHHMMSSZ.sqlite` y verifica la copia con `PRAGMA quick_check` antes de guardarla. Conserva los `BACKUP_KEEP` respaldos más recientes (7 por defecto) en `BACKUP_DIR`, que por defecto es la carpeta `respaldos` junto a `DB_PATH`. `BACKUP_KEEP=0` los desactiva. Si la base está cifrada, cada respaldo queda cifrado con la misma `DB_ENCRYPTION_KEY`. Guarda la clave por separado porque sin ella el respaldo no se puede abrir.
+
+Los respaldos viven en el mismo disco que la base. Te protegen si el archivo se daña o se borra por error, pero no si el host pierde el volumen. Descarga de vez en cuando el más reciente desde el panel del host. Para restaurar, detén el bot y reemplaza `DB_PATH` por una copia del respaldo. Luego borra los archivos `-wal` y `-shm` que hayan quedado y vuelve a arrancar.

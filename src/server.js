@@ -1,9 +1,10 @@
 import { createPublicKey, verify } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
+import { startBackups } from './backup.js';
 import { card, handleInteraction } from './interactions.js';
 import { discordApi } from './discord.js';
 import { createLineupViewer } from './lineup-viewer.js';
@@ -189,6 +190,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   const config = configFromEnv(process.env);
   const dbPath = process.env.DB_PATH || './data/pickups.sqlite';
   const store = new PickupStore(dbPath, Date.now, process.env.DB_ENCRYPTION_KEY);
+  const backupKeep = Number(process.env.BACKUP_KEEP?.trim() || 7);
+  if (!Number.isInteger(backupKeep) || backupKeep < 0 || backupKeep > 365) {
+    throw new Error('BACKUP_KEEP debe ser un número entero de 0 a 365.');
+  }
+  const stopBackups = backupKeep ? startBackups(store, {
+    dir: process.env.BACKUP_DIR?.trim() || join(dirname(dbPath), 'respaldos'),
+    keep: backupKeep, encryptionKey: process.env.DB_ENCRYPTION_KEY,
+  }) : undefined;
   const guilds = [config, ...config.additionalGuilds.values()];
   const withRooms = guilds.filter((guild) => guild.roomCategory);
   if (withRooms.length && config.publicBaseUrl) {
@@ -220,6 +229,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     process.once(signal, () => {
       clearInterval(timer);
       stopNotices?.();
+      stopBackups?.();
       server.close(() => store.db.close());
     });
   }
