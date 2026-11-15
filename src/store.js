@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { balancedTeams } from './matchmaking.js';
 import { DEFAULT_TEAM_SIZE, DEFAULT_VOTE_MINUTES, DRAFT_QUEUE_FORMAT, DRAFT_QUEUE_LIMIT, DRAFT_SLOTS, OUTCOMES, POSITIONS, PickupCreationRequired, PickupError, QUEUE_IDLE_MINUTES, ROOM_RETENTION_HOURS, TEAM_NAMES, TEAM_QUEUE_FORMAT } from './rules.js';
 
-function openDatabase(path, encryptionKey) {
+export function openDatabase(path, encryptionKey) {
   if (!encryptionKey) return new DatabaseSync(path, { timeout: 500 });
   if (!/^[a-f0-9]{64}$/i.test(encryptionKey)) throw new Error('DB_ENCRYPTION_KEY debe tener 64 caracteres hexadecimales.');
 
@@ -27,6 +27,7 @@ function openDatabase(path, encryptionKey) {
 export class PickupStore {
   constructor(path, now = Date.now, encryptionKey) {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
+    this.path = path;
     this.db = openDatabase(path, encryptionKey);
     this.now = now;
     this.db.exec(`
