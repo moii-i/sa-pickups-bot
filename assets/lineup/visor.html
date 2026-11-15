@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SA Pickups · Alineación 3D</title>
+  <link rel="stylesheet" href="/alineacion/estilo.css">
+  <script type="module" src="/alineacion/visor.js"></script>
+</head>
+<body>
+  <main>
+    <header><span>SA PICKUPS</span><h1>Alineación 3D</h1><span data-match>5V5</span></header>
+    <section data-access aria-live="polite">
+      <h2>Acceso desde Discord</h2>
+      <p data-instructions>En la sala privada, pulsa <strong>Autorizar visor</strong> e introduce este código.</p>
+      <output data-code>Cargando…</output>
+      <button type="button" data-renew hidden>Obtener otro código</button>
+    </section>
+    <section data-view hidden aria-label="Visor de la alineación">
+      <div class="controls" aria-label="Cámara y animación">
+        <button type="button" data-camera="left" aria-label="Girar cámara a la izquierda">↶ Girar</button>
+        <button type="button" data-camera="right" aria-label="Girar cámara a la derecha">Girar ↷</button>
+        <button type="button" data-camera="top">Vista táctica</button>
+        <button type="button" data-replay>Repetir entrada</button>
+      </div>
+      <div data-pitch class="pitch"></div>
+      <p class="hint">Arrastra la cancha para girarla.</p>
+      <ul data-roster class="sr-only" aria-label="Jugadores y posiciones"></ul>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,7 @@
+.git
+.env
+.env.*
+data/
+node_modules/
+test/
+Inventario3D_ID3D_20261107/

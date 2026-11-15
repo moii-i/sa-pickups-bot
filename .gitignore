@@ -1,0 +1,7 @@
+.env
+.env.*
+!.env.example
+data/
+node_modules/
+Inventario3D_ID3D_20261107/
+*.sqlite*
